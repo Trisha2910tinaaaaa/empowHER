@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Bool
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
-from .database import Base
+from database import Base
 
 # Association table for likes
 likes = Table(
@@ -35,6 +35,7 @@ class User(Base):
     saved_jobs = relationship("JobSave", back_populates="user")
     sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
     received_messages = relationship("Message", foreign_keys="Message.receiver_id", back_populates="receiver")
+    chat_history = relationship("ChatHistory", back_populates="user")
 
 class Post(Base):
     __tablename__ = "posts"
@@ -93,4 +94,16 @@ class Message(Base):
 
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
-    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages") 
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id'))
+    messages = Column(Text)  # Stored as JSON string
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="chat_history") 

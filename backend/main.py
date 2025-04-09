@@ -16,6 +16,8 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Table, func
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
+from database import get_db, SessionLocal
+from sql_models import ChatHistory, User
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -149,6 +151,17 @@ class SearchResponse(BaseModel):
 
 # Cache for job information to prevent redundant API calls
 job_cache = {}
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class ChatSession(BaseModel):
+    user_id: str
+    messages: List[ChatMessage]
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 @app.get("/", tags=["Health"])
 async def root():
@@ -487,6 +500,126 @@ async def get_statistics():
         "women_friendly_companies_count": len(WOMEN_FRIENDLY_COMPANIES),
         "status": "healthy"
     }
+
+@app.post("/api/chat/session", tags=["Chat"])
+async def create_chat_session(session: ChatSession, db: SessionLocal = Depends(get_db)):
+    """Create a new chat session"""
+    try:
+        db_session = ChatHistory(
+            user_id=session.user_id,
+            messages=json.dumps([msg.dict() for msg in session.messages]),
+            created_at=session.created_at,
+            updated_at=session.updated_at
+        )
+        db.add(db_session)
+        db.commit()
+        db.refresh(db_session)
+        return {"session_id": db_session.id, "status": "success"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/sessions/{user_id}", tags=["Chat"])
+async def get_chat_sessions(user_id: str, db: SessionLocal = Depends(get_db)):
+    """Get all chat sessions for a user"""
+    try:
+        sessions = db.query(ChatHistory).filter(ChatHistory.user_id == user_id).all()
+        return [{
+            "session_id": session.id,
+            "messages": json.loads(session.messages),
+            "created_at": session.created_at,
+            "updated_at": session.updated_at
+        } for session in sessions]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat/analyze", tags=["Chat"])
+async def analyze_chat_history(chat_history: List[ChatMessage]):
+    """Analyze chat history to provide insights and recommendations"""
+    try:
+        # Use LLM to analyze the conversation
+        llm = get_llm()
+        messages = [{"role": msg.role, "content": msg.content} for msg in chat_history]
+        
+        analysis_prompt = f"""
+        Analyze the following conversation and provide:
+        1. Key skills mentioned
+        2. Career interests
+        3. Potential job matches
+        4. Recommended next steps
+        5. Areas for improvement
+        
+        Conversation:
+        {json.dumps(messages, indent=2)}
+        """
+        
+        response = llm.invoke(analysis_prompt)
+        return {"analysis": response.content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat/suggest", tags=["Chat"])
+async def suggest_resources(chat_history: List[ChatMessage]):
+    """Suggest learning resources based on chat history"""
+    try:
+        llm = get_llm()
+        messages = [{"role": msg.role, "content": msg.content} for msg in chat_history]
+        
+        suggestion_prompt = f"""
+        Based on this conversation, suggest:
+        1. Relevant online courses
+        2. Books to read
+        3. Communities to join
+        4. Skills to develop
+        5. Networking opportunities
+        
+        Conversation:
+        {json.dumps(messages, indent=2)}
+        """
+        
+        response = llm.invoke(suggestion_prompt)
+        return {"suggestions": response.content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat", tags=["Chat"])
+async def chat_with_ai(message: str):
+    """Chat with the AI assistant"""
+    try:
+        llm = get_llm()
+        
+        # Create a more focused prompt for career-related conversations
+        prompt = f"""
+        You are a career assistant focused on helping women in tech. 
+        Provide helpful, supportive, and actionable advice.
+        
+        User message: {message}
+        
+        Consider:
+        1. Career development
+        2. Skill building
+        3. Job search strategies
+        4. Work-life balance
+        5. Networking opportunities
+        6. Industry trends
+        7. Salary negotiation
+        8. Professional growth
+        
+        Keep responses concise, practical, and encouraging.
+        """
+        
+        response = llm.invoke(prompt)
+        
+        return {
+            "response": response.content,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error in chat_with_ai: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process chat request. Please try again."
+        )
 
 # Main execution
 if __name__ == "__main__":

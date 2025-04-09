@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     # CORS settings
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
     
-    # OpenAI settings
+    # API Keys
+    TAVILY_API_KEY: str
+    GROQ_API_KEY: str
+    DIFFBOT_API_KEY: str
     OPENAI_API_KEY: Optional[str] = None
     
     # Email settings
