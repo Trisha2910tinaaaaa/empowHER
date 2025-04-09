@@ -12,6 +12,10 @@ import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Table, func
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
